@@ -11,3 +11,7 @@ The tool will detect a revenue anomaly, test fixed hypotheses for region, device
 3. backend
 4. AI explanation
 5. dashboard
+
+## Demo mode
+
+Demo Mode uses a copy of the real dataset with a deliberately simulated incident. It is intended for testing the pipeline and explaining the logic in a safe, reproducible way. Results from Demo Mode must never be described as naturally observed business events or as real-world evidence of a production outage.
