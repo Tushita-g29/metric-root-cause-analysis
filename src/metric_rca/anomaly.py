@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from scipy.stats import ttest_ind
 
 
 def aggregate_daily_revenue(cleaned_df: pd.DataFrame) -> pd.DataFrame:
@@ -36,9 +37,9 @@ def detect_recent_revenue_drop(
     daily_revenue_df: pd.DataFrame,
     current_days: int = 28,
     baseline_days: int = 56,
-    z_threshold: float = -2.0,
+    alpha: float = 0.05,
 ) -> dict:
-    """Detect a statistically supported recent negative revenue shift."""
+    """Detect a statistically supported recent negative revenue shift using Welch's t-test."""
     if len(daily_revenue_df) < current_days + baseline_days:
         raise ValueError(
             "Not enough daily revenue history. Need at least current_days + baseline_days rows."
@@ -59,13 +60,41 @@ def detect_recent_revenue_drop(
 
     pct_change = 0.0 if baseline_avg == 0 else ((current_avg - baseline_avg) / baseline_avg) * 100.0
 
-    baseline_std = float(baseline["daily_revenue"].std(ddof=0))
-    if baseline_std == 0:
-        z_score = 0.0
-    else:
-        z_score = float((current_avg - baseline_avg) / baseline_std)
+    baseline_values = baseline["daily_revenue"].to_numpy(dtype=float)
+    current_values = current["daily_revenue"].to_numpy(dtype=float)
 
-    is_drop_anomaly = (pct_change < 0) and (z_score <= z_threshold)
+    baseline_var = float(np.var(baseline_values, ddof=1)) if baseline_values.size > 1 else 0.0
+    current_var = float(np.var(current_values, ddof=1)) if current_values.size > 1 else 0.0
+    pooled_var = ((baseline_values.size - 1) * baseline_var + (current_values.size - 1) * current_var) / (
+        baseline_values.size + current_values.size - 2
+    ) if (baseline_values.size + current_values.size - 2) > 0 else 0.0
+
+    if baseline_var == 0 and current_var == 0:
+        welch_t_statistic = 0.0
+        p_value = 1.0
+        cohen_d = 0.0
+    else:
+        try:
+            welch_t_statistic, p_value = ttest_ind(
+                current_values,
+                baseline_values,
+                equal_var=False,
+                alternative="less",
+            )
+        except Exception:
+            welch_t_statistic = 0.0
+            p_value = 1.0
+
+        if np.isnan(welch_t_statistic) or np.isnan(p_value):
+            welch_t_statistic = 0.0
+            p_value = 1.0
+
+        if pooled_var == 0:
+            cohen_d = 0.0
+        else:
+            cohen_d = float((current_avg - baseline_avg) / np.sqrt(pooled_var))
+
+    is_drop_anomaly = (pct_change < 0) and (p_value < alpha)
 
     return {
         "current_period_start": current["event_date"].min(),
@@ -77,7 +106,11 @@ def detect_recent_revenue_drop(
         "baseline_avg_daily_revenue": baseline_avg,
         "current_avg_daily_revenue": current_avg,
         "percentage_change": pct_change,
-        "baseline_std_dev": baseline_std,
-        "z_score": z_score,
-        "is_drop_anomaly": is_drop_anomaly,
+        "baseline_std_dev": float(np.std(baseline_values, ddof=0)) if baseline_values.size else 0.0,
+        "current_std_dev": float(np.std(current_values, ddof=0)) if current_values.size else 0.0,
+        "welch_t_statistic": float(welch_t_statistic),
+        "p_value": float(p_value),
+        "cohen_d": float(cohen_d),
+        "alpha": float(alpha),
+        "is_drop_anomaly": bool(is_drop_anomaly),
     }
