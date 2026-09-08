@@ -194,3 +194,220 @@ def flag_confound_warnings(
         warnings,
         columns=["dimension_a", "dimension_b", "cramers_v", "p_value", "warning_text"],
     )
+
+
+def measure_ranked_segment_overlap(
+    df: pd.DataFrame,
+    ranked_hypotheses_df: pd.DataFrame,
+    current_start: str,
+    current_end: str,
+    top_n: int = 5,
+) -> pd.DataFrame:
+    """Measure overlap between ranked segments from different dimensions in the current period."""
+    if df is None or df.empty:
+        raise ValueError("df cannot be empty.")
+    if ranked_hypotheses_df is None or ranked_hypotheses_df.empty:
+        raise ValueError("ranked_hypotheses_df cannot be empty.")
+    if "event_date" not in df.columns:
+        raise ValueError("df must include an 'event_date' column.")
+    if "dimension" not in ranked_hypotheses_df.columns or "segment" not in ranked_hypotheses_df.columns:
+        raise ValueError("ranked_hypotheses_df must include 'dimension' and 'segment' columns.")
+    if top_n <= 0:
+        raise ValueError("top_n must be a positive integer.")
+
+    try:
+        start_dt = pd.to_datetime(current_start)
+        end_dt = pd.to_datetime(current_end)
+    except Exception as exc:
+        raise ValueError("current_start and current_end must be valid dates.") from exc
+
+    if start_dt > end_dt:
+        raise ValueError("current_start must be on or before current_end.")
+
+    current_period = df.loc[(df["event_date"] >= start_dt) & (df["event_date"] <= end_dt)].copy()
+    if current_period.empty:
+        raise ValueError("No rows in df fall within the inclusive current-period date range.")
+
+    ranked = ranked_hypotheses_df.copy()
+    if "rank" in ranked.columns:
+        ranked = ranked.sort_values("rank").copy()
+    ranked = ranked.head(int(top_n)).copy()
+    if ranked.empty:
+        raise ValueError("No ranked contributor rows are available for the requested top_n selection.")
+
+    rows: list[dict[str, object]] = []
+    total_rows = len(current_period)
+
+    for left_index in range(len(ranked)):
+        for right_index in range(left_index + 1, len(ranked)):
+            row_a = ranked.iloc[left_index]
+            row_b = ranked.iloc[right_index]
+            dimension_a = str(row_a["dimension"]).strip()
+            segment_a = str(row_a["segment"]).strip()
+            dimension_b = str(row_b["dimension"]).strip()
+            segment_b = str(row_b["segment"]).strip()
+
+            if dimension_a == dimension_b:
+                continue
+            if dimension_a not in current_period.columns or dimension_b not in current_period.columns:
+                raise ValueError(f"Current-period df is missing required dimensions: {dimension_a}, {dimension_b}")
+
+            a_mask = current_period[dimension_a].astype(str).str.strip().eq(segment_a)
+            b_mask = current_period[dimension_b].astype(str).str.strip().eq(segment_b)
+            n_a = int(a_mask.sum())
+            n_b = int(b_mask.sum())
+            n_both = int((a_mask & b_mask).sum())
+
+            if n_a == 0 or n_b == 0:
+                pct_b_given_a = np.nan
+                pct_a_given_b = np.nan
+                lift = np.nan
+                chi_square_statistic = np.nan
+                p_value = np.nan
+                phi_coefficient = np.nan
+            else:
+                pct_b_given_a = float(n_both / n_a)
+                pct_a_given_b = float(n_both / n_b)
+                lift = float((n_both / n_a) / (n_b / total_rows)) if n_b > 0 and total_rows > 0 else np.nan
+                table = np.array(
+                    [[n_both, n_a - n_both], [n_b - n_both, total_rows - n_a - n_b + n_both]],
+                    dtype=float,
+                )
+                if np.any(table < 0):
+                    chi_square_statistic = np.nan
+                    p_value = np.nan
+                    phi_coefficient = np.nan
+                elif np.all(table == 0) or np.any(table.sum(axis=1) == 0) or np.any(table.sum(axis=0) == 0):
+                    chi_square_statistic = np.nan
+                    p_value = np.nan
+                    phi_coefficient = np.nan
+                else:
+                    try:
+                        chi_square_statistic, p_value, _, _ = chi2_contingency(table, correction=False)
+                    except ValueError:
+                        chi_square_statistic = np.nan
+                        p_value = np.nan
+                        phi_coefficient = np.nan
+                    else:
+                        a, b, c, d = table.ravel()
+                        denominator = np.sqrt((a + b) * (c + d) * (a + c) * (b + d))
+                        phi_coefficient = 0.0 if denominator == 0 else float(abs((a * d - b * c) / denominator))
+
+            rows.append(
+                {
+                    "dimension_a": dimension_a,
+                    "segment_a": segment_a,
+                    "dimension_b": dimension_b,
+                    "segment_b": segment_b,
+                    "rows_in_a": n_a,
+                    "rows_in_b": n_b,
+                    "rows_in_both": n_both,
+                    "pct_b_given_a": pct_b_given_a,
+                    "pct_a_given_b": pct_a_given_b,
+                    "lift": lift,
+                    "chi_square_statistic": chi_square_statistic,
+                    "p_value": p_value,
+                    "phi_coefficient": phi_coefficient,
+                }
+            )
+
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "dimension_a",
+            "segment_a",
+            "dimension_b",
+            "segment_b",
+            "rows_in_a",
+            "rows_in_b",
+            "rows_in_both",
+            "pct_b_given_a",
+            "pct_a_given_b",
+            "lift",
+            "chi_square_statistic",
+            "p_value",
+            "phi_coefficient",
+        ],
+    )
+
+
+def flag_segment_overlap_warnings(
+    overlaps_df: pd.DataFrame,
+    conditional_share_threshold: float = 0.70,
+    alpha: float = 0.05,
+) -> pd.DataFrame:
+    """Return only overlap warnings for pairs with strong conditional sharing and statistical significance."""
+    required_columns = {
+        "dimension_a",
+        "segment_a",
+        "dimension_b",
+        "segment_b",
+        "pct_b_given_a",
+        "pct_a_given_b",
+        "p_value",
+    }
+
+    if overlaps_df is None or overlaps_df.empty:
+        return pd.DataFrame(
+            columns=[
+                "dimension_a",
+                "segment_a",
+                "dimension_b",
+                "segment_b",
+                "pct_b_given_a",
+                "pct_a_given_b",
+                "p_value",
+                "warning_text",
+            ]
+        )
+    if not required_columns.issubset(overlaps_df.columns):
+        raise ValueError(
+            "overlaps_df must include 'dimension_a', 'segment_a', 'dimension_b', 'segment_b', 'pct_b_given_a', 'pct_a_given_b', and 'p_value'."
+        )
+    if not 0 < alpha < 1:
+        raise ValueError("alpha must be between 0 and 1.")
+    if not 0 <= conditional_share_threshold <= 1:
+        raise ValueError("conditional_share_threshold must be between 0 and 1.")
+
+    warnings = overlaps_df.loc[
+        overlaps_df["p_value"].notna()
+        & (overlaps_df["p_value"] < alpha)
+        & (
+            (overlaps_df["pct_b_given_a"] >= conditional_share_threshold)
+            | (overlaps_df["pct_a_given_b"] >= conditional_share_threshold)
+        )
+    ].copy()
+
+    if warnings.empty:
+        return pd.DataFrame(
+            columns=[
+                "dimension_a",
+                "segment_a",
+                "dimension_b",
+                "segment_b",
+                "pct_b_given_a",
+                "pct_a_given_b",
+                "p_value",
+                "warning_text",
+            ]
+        )
+
+    warnings["warning_text"] = warnings.apply(
+        lambda row: (
+            f"Overlapping ranked contributor signals: {row['segment_a']} in {row['dimension_a']} and {row['segment_b']} in {row['dimension_b']} "
+            f"share {max(float(row['pct_b_given_a']), float(row['pct_a_given_b'])):.2%} of the signal in the paired group. "
+            "These signals overlap and should not be presented as independent causes."
+        ),
+        axis=1,
+    )
+
+    return warnings[[
+        "dimension_a",
+        "segment_a",
+        "dimension_b",
+        "segment_b",
+        "pct_b_given_a",
+        "pct_a_given_b",
+        "p_value",
+        "warning_text",
+    ]].reset_index(drop=True)
