@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metric_rca"
+version = "0.1.0"
+description = "Automated Root-Cause Analysis Tool for Business Metrics"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["metric_rca*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
