@@ -34,6 +34,12 @@ def _write_synthetic_sales_csv(path) -> None:
     pd.DataFrame(rows).to_csv(path, index=False)
 
 
+def test_dashboard_root_returns_title() -> None:
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Metric Root-Cause Analysis" in response.text
+
+
 def test_health_endpoint_returns_ok() -> None:
     response = client.get("/health")
     assert response.status_code == 200

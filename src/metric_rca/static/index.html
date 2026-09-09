@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Metric Root-Cause Analysis</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+</head>
+
+<body>
+    <div class="page-shell">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">Business metric monitoring</p>
+                <h1>Metric Root-Cause Analysis</h1>
+                <p class="subtitle">Evidence-backed investigation for business metric changes</p>
+            </div>
+            <div class="status-pill" aria-live="polite">
+                <span class="status-dot"></span>
+                <span id="backend-status-text">Checking backend…</span>
+            </div>
+        </header>
+
+        <main class="dashboard">
+            <section class="controls card">
+                <div class="button-row">
+                    <button id="demo-button" class="primary" type="button">Run Demo Investigation</button>
+                    <button id="real-button" class="secondary" type="button">Run Real Data Investigation</button>
+                    <button id="ai-button" class="ghost hidden" type="button">Generate AI Explanation</button>
+                </div>
+                <div class="message-area" id="message-area" aria-live="polite"></div>
+            </section>
+
+            <section class="results-grid">
+                <article class="card summary-card">
+                    <div class="section-heading">
+                        <h2>Investigation Summary</h2>
+                    </div>
+                    <div id="summary-content" class="summary-content empty-state">
+                        No investigation run yet.
+                    </div>
+                </article>
+
+                <article class="card anomaly-card">
+                    <div class="section-heading">
+                        <h2>Anomaly Summary</h2>
+                    </div>
+                    <div id="anomaly-content" class="empty-state">No anomaly data available.</div>
+                </article>
+            </section>
+
+            <section class="card">
+                <div class="section-heading">
+                    <h2>Data Quality</h2>
+                </div>
+                <div id="data-quality-content" class="empty-state">No data quality summary yet.</div>
+            </section>
+
+            <section class="card">
+                <div class="section-heading">
+                    <h2>Associated Contributors</h2>
+                </div>
+                <div id="findings-content" class="empty-state">No ranked findings yet.</div>
+            </section>
+
+            <section class="card">
+                <div class="section-heading">
+                    <h2>Overlap and Confound Warnings</h2>
+                </div>
+                <div id="warnings-content" class="empty-state">No overlap warnings yet.</div>
+            </section>
+
+            <section class="card">
+                <div class="section-heading">
+                    <h2>AI Explanation</h2>
+                </div>
+                <div id="ai-content" class="empty-state">No AI explanation generated yet.</div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+
+</html>

@@ -4,14 +4,24 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from metric_rca.gemini_explainer import generate_evidence_backed_explanation
 from metric_rca.investigation import run_investigation
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DATASET_PATH = REPO_ROOT / "data" / "raw" / "google_merchandise_sales.csv"
+STATIC_DIR = REPO_ROOT / "src" / "metric_rca" / "static"
 
 app = FastAPI(title="Metric Root Cause Analysis API", version="0.1.0")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/")
+def dashboard() -> FileResponse:
+    """Serve the analytics dashboard HTML page."""
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/health")
