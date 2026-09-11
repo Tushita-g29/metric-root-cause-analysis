@@ -59,7 +59,7 @@ def generate_evidence_backed_explanation(
         raise ValueError("investigation_result must be a dictionary.")
 
     evidence = _normalize_evidence(investigation_result)
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    model_name = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
     if client is None:
         if genai is None:

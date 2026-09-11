@@ -36,9 +36,9 @@ def test_generate_evidence_backed_explanation_uses_fake_client() -> None:
 
     result = generate_evidence_backed_explanation(investigation, client=fake_client)
 
-    assert result["model"] == "gemini-2.5-flash-lite"
+    assert result["model"] == "gemini-3.5-flash-lite"
     assert "associated contributors" in result["explanation"] or "associated" in result["explanation"]
-    assert fake_client.calls[0]["model"] == "gemini-2.5-flash-lite"
+    assert fake_client.calls[0]["model"] == "gemini-3.5-flash-lite"
     assert "status" in fake_client.calls[0]["contents"]
     assert "confound_warnings" in fake_client.calls[0]["contents"]
 
